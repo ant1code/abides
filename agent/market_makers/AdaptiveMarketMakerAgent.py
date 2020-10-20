@@ -1,7 +1,6 @@
 from agent.TradingAgent import TradingAgent
 import pandas as pd
 from util.util import log_print
-from collections import namedtuple, deque
 from util.util import ignored, sigmoid
 from math import floor, ceil
 
@@ -27,7 +26,7 @@ class AdaptiveMarketMakerAgent(TradingAgent):
     """
 
     def __init__(self, id, name, type, symbol, starting_cash, pov=0.05, min_order_size=20, window_size=5, anchor=ANCHOR_MIDDLE_STR,
-                 num_ticks=20, level_spacing=0.5, wake_up_freq='1s', subscribe=False, subscribe_freq=10e9, subscribe_num_levels=1, cancel_limit_delay=50,
+                 num_ticks=20, level_spacing=0.5, wake_up_freq='1s', poisson_arrival=True, subscribe=False, subscribe_freq=10e9, subscribe_num_levels=1, cancel_limit_delay=50,
                  skew_beta=0, spread_alpha=0.85, backstop_quantity=None, log_orders=False, random_state=None):
 
         super().__init__(id, name, type, starting_cash=starting_cash, log_orders=log_orders, random_state=random_state)
@@ -41,6 +40,10 @@ class AdaptiveMarketMakerAgent(TradingAgent):
         self.num_ticks = num_ticks  # number of ticks on each side of window in which to place liquidity
         self.level_spacing = level_spacing  #  level spacing as a fraction of the spread
         self.wake_up_freq = wake_up_freq  # Frequency of agent wake up
+        self.poisson_arrival = poisson_arrival  # Whether to arrive as a Poisson process
+        if self.poisson_arrival:
+            self.arrival_rate = pd.Timedelta(self.wake_up_freq).total_seconds() * 1e9
+
         self.subscribe = subscribe  # Flag to determine whether to subscribe to data or use polling mechanism
         self.subscribe_freq = subscribe_freq  # Frequency in nanoseconds^-1 at which to receive market updates
                                               # in subscribe mode
@@ -281,8 +284,12 @@ class AdaptiveMarketMakerAgent(TradingAgent):
             self.placeLimitOrder(self.symbol, self.sell_order_size, False, ask_price)
 
     def getWakeFrequency(self):
-        """ Get time increment corresponding to wakeup period. """
-        return pd.Timedelta(self.wake_up_freq)
+        if not self.poisson_arrival:
+            return pd.Timedelta(self.wake_up_freq)
+        else:
+            delta_time = self.random_state.exponential(scale=self.arrival_rate)
+            td = pd.Timedelta('{}ns'.format(int(round(delta_time))))
+            return td
 
     def cancelAllOrders(self):
         """ Cancels all resting limit orders placed by the market maker """

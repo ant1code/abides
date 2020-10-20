@@ -11,16 +11,19 @@ class MomentumAgent(TradingAgent):
     """
 
     def __init__(self, id, name, type, symbol, starting_cash,
-                 min_size=20, max_size=50, wake_up_freq='60s', order_size_model=None,
+                 min_size, max_size, wake_up_freq='60s', poisson_arrival=True,
                  subscribe=False, log_orders=False, random_state=None):
 
         super().__init__(id, name, type, starting_cash=starting_cash, log_orders=log_orders, random_state=random_state)
         self.symbol = symbol
         self.min_size = min_size  # Minimum order size
         self.max_size = max_size  # Maximum order size
-        self.size = self.random_state.randint(self.min_size, self.max_size) if order_size_model is None else None
-        self.order_size_model = order_size_model  # Probabilistic model for order size
+        self.size = self.random_state.randint(self.min_size, self.max_size)
         self.wake_up_freq = wake_up_freq
+        self.poisson_arrival = poisson_arrival  # Whether to arrive as a Poisson process
+        if self.poisson_arrival:
+            self.arrival_rate = pd.Timedelta(self.wake_up_freq).total_seconds() * 1e9
+
         self.subscribe = subscribe  # Flag to determine whether to subscribe to data or use polling mechanism
         self.subscription_requested = False
         self.mid_list, self.avg_20_list, self.avg_50_list = [], [], []
@@ -61,15 +64,18 @@ class MomentumAgent(TradingAgent):
             if len(self.mid_list) > 20: self.avg_20_list.append(MomentumAgent.ma(self.mid_list, n=20)[-1].round(2))
             if len(self.mid_list) > 50: self.avg_50_list.append(MomentumAgent.ma(self.mid_list, n=50)[-1].round(2))
             if len(self.avg_20_list) > 0 and len(self.avg_50_list) > 0:
-                if self.order_size_model is not None:
-                    self.size = self.order_size_model.sample(random_state=self.random_state)
                 if self.avg_20_list[-1] >= self.avg_50_list[-1]:
                     self.placeLimitOrder(self.symbol, quantity=self.size, is_buy_order=True, limit_price=ask)
                 else:
                     self.placeLimitOrder(self.symbol, quantity=self.size, is_buy_order=False, limit_price=bid)
 
     def getWakeFrequency(self):
-        return pd.Timedelta(self.wake_up_freq)
+        if not self.poisson_arrival:
+            return pd.Timedelta(self.wake_up_freq)
+        else:
+            delta_time = self.random_state.exponential(scale=self.arrival_rate)
+            td = pd.Timedelta('{}ns'.format(int(round(delta_time))))
+            return td
 
 
     @staticmethod
