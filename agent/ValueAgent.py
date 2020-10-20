@@ -9,7 +9,7 @@ import pandas as pd
 class ValueAgent(TradingAgent):
 
     def __init__(self, id, name, type, symbol='IBM', starting_cash=100000, sigma_n=10000,
-                 r_bar=100000, kappa=0.05, sigma_s=100000,
+                 r_bar=100000, kappa=0.05, sigma_s=100000, order_size_model=None,
                  lambda_a=0.005, log_orders=False, random_state=None):
 
         # Base class init.
@@ -40,7 +40,10 @@ class ValueAgent(TradingAgent):
         self.prev_wake_time = None
 
         self.percent_aggr = 0.1                 #percent of time that the agent will aggress the spread
-        self.size = np.random.randint(20, 50)   #size that the agent will be placing
+
+        self.size = np.random.randint(20, 50) if order_size_model is None else None
+        self.order_size_model = order_size_model  # Probabilistic model for order size
+
         self.depth_spread = 2
 
     def kernelStarting(self, startTime):
@@ -216,6 +219,9 @@ class ValueAgent(TradingAgent):
             p = r_T
 
         # Place the order
+        if self.order_size_model is not None:
+            self.size = self.order_size_model.sample(random_state=self.random_state)
+
         self.placeLimitOrder(self.symbol, self.size, buy, p)
 
     def receiveMessage(self, currentTime, msg):

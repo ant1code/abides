@@ -8,7 +8,7 @@ import pandas as pd
 
 class NoiseAgent(TradingAgent):
 
-    def __init__(self, id, name, type, symbol='IBM', starting_cash=100000, log_orders=False, random_state=None, wakeup_time = None ):
+    def __init__(self, id, name, type, symbol='IBM', starting_cash=100000, log_orders=False, order_size_model=None, random_state=None, wakeup_time = None ):
 
         # Base class init.
         super().__init__(id, name, type, starting_cash=starting_cash, log_orders=log_orders, random_state=random_state)
@@ -29,7 +29,9 @@ class NoiseAgent(TradingAgent):
         # units have passed.
         self.prev_wake_time = None
 
-        self.size = np.random.randint(20, 50)
+        self.size = np.random.randint(20, 50) if order_size_model is None else None
+
+        self.order_size_model = order_size_model  # Probabilistic model for order size
 
     def kernelStarting(self, startTime):
         # self.kernel is set in Agent.kernelInitializing()
@@ -114,6 +116,9 @@ class NoiseAgent(TradingAgent):
         buy_indicator = np.random.randint(0, 1 + 1)
 
         bid, bid_vol, ask, ask_vol = self.getKnownBidAsk(self.symbol)
+
+        if self.order_size_model is not None:
+            self.size = self.order_size_model.sample(random_state=self.random_state)
 
         if buy_indicator and ask:
             self.placeLimitOrder(self.symbol, self.size, buy_indicator, ask)
