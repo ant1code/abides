@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 import os, queue, sys
-from message.Message import MessageType
+from Message.message import MessageType
 
 from util.util import log_print
 
